@@ -53,55 +53,8 @@ class RightHandRuleController:
         if self.scan is not None:
             #Obtenemos el angulo de inclinacion que tiene el robot conforme al muro                               
             alpha = find_wall_direction(self.scan)
-            #print(alpha)
             #Obtenemos la distancia perpendicular que tiene el robot conforme al muro
             perpendicular_wall_dis = self.distance_to_left * np.cos(alpha)
-            #print(distance_ahead)
-            #Declaramos el angulo de inclinacion Deseado
-            alpha_des = 0
-            #Declaramos a que distancia deseamos estar alejados del muro
-            perpendicular_wall_dis_des = self.wall_dist
-            #Obtenemos el error de angulo de distancia hacia el muro
-            error_alpha = alpha_des - alpha
-            error_perpendicular_wall_dis = perpendicular_wall_dis_des - perpendicular_wall_dis
-            #Definimos las constantes proporcionales del sistema de control
-            kp_alpha = 1
-            kp_perpendicular_wall_dis = 1
-            w = (kp_alpha * error_alpha) + (kp_perpendicular_wall_dis * error_perpendicular_wall_dis)
-            #--------------------------------------------------------------
-            #--------------------------------------------------------------
-            #Definimos el limte del filtro de saturacion
-            limite = 1.5
-            #Defimimos la distancia maxim que nos podemos hacercar de frente con el robot
-            limite_dis_ahead = 0.75
-            #Si estamos muy cerca del muro giramosa la izquierda.
-            #Creamos el filtro de saturacion.
-            v = self.v_max
-            if w > self.w_max:
-                w = self.w_max
-            elif w < -1*self.w_max:
-                w = -1*self.w_max
-            #print(distance_ahead)
-            if self.distance_ahead < limite_dis_ahead:
-                v=0
-                w = 1
-            if ((self.distance_ahead < 0.5) or (self.rayo_izq < 0.3) or (self.rayo_der < 0.3)) and (self.distance_to_left > 2):
-                v=0
-                w = 1
-            
-            return (v,-w)
-        else:
-            return (0.0,0.0)
-            
-    def follow_right_hand_wall(self):
-        #print(len(self.scan.ranges))
-        if self.scan is not None:
-            #Obtenemos el angulo de inclinacion que tiene el robot conforme al muro                               
-            alpha = find_wall_direction_right(self.scan)
-            #print(alpha)
-            #Obtenemos la distancia perpendicular que tiene el robot conforme al muro
-            perpendicular_wall_dis = self.distance_to_right * np.cos(alpha)
-            #print(distance_ahead)
             #Declaramos el angulo de inclinacion Deseado
             alpha_des = 0
             #Declaramos a que distancia deseamos estar alejados del muro
@@ -113,37 +66,44 @@ class RightHandRuleController:
             kp_alpha = 1
             kp_perpendicular_wall_dis = 1
             #Sumamos lo de los dos controladores proporcionales para obtener la velocidad angular
-            w = (kp_alpha * error_alpha) + (kp_perpendicular_wall_dis * error_perpendicular_wall_dis)
+            w = (kp_alpha * error_alpha)# + (kp_perpendicular_wall_dis * error_perpendicular_wall_dis)
             #--------------------------------------------------------------
             #--------------------------------------------------------------
             #Definimos el limte del filtro de saturacion
             limite = 1.5
             #Defimimos la distancia maxim que nos podemos hacercar de frente con el robot
-            limite_dis_ahead = 0.5
-            #Si estamos muy cerca del muro giramosa la izquierda.
+            limite_dis_ahead = 0.75
             #Creamos el filtro de saturacion.
+            v = self.v_max
             if w > self.w_max:
                 w = self.w_max
             elif w < -1*self.w_max:
                 w = -1*self.w_max
-            #print(distance_ahead)
+            #Si estamos muy cerca del muro giramosa la izquierda.
             if self.distance_ahead < limite_dis_ahead:
+                v=0
+                w = 1
+            #En caso de estar enfrente de algo o con algo cerca a la izqueirda o derecha girar a la izqueirda sin avanzar
+            if ((self.distance_ahead < 0.5) or (self.rayo_izq < 0.3) or (self.rayo_der < 0.3)) and (self.distance_to_left > 2):
+                v=0
                 w = 1
             
-            return (self.v_max,w)
+            return (v,-w)
         else:
             return (0.0,0.0)
+            
     
     def cal_odometry(self,x,y,th,dt):
+        #Funcion que hace los calculos de odometria de la nueva posicion
         x = x + self.r*((self.wr+self.wl)/(2))*dt*np.cos(th)
         y = y + self.r*((self.wr+self.wl)/(2))*dt*np.sin(th)
         th = th + self.r*((self.wr-self.wl)/(self.l))*dt
         return (x,y,th)
 
     def odometry(self,dt,xin,yin):
-        #ther = np.arctan2(self.xt,self.yt) - 
-        #t0 = rospy.get_rostime().to_sec()
+        #Hacemos los nuevos calculos de la odometria
         x,y,th = self.cal_odometry(self.x,self.y,self.th,dt)
+        #Hacemos que el calculo de inclinacion siempre vaya de 0 a -pi o de 0 a pi
         if th > np.pi:
             th = th - 2*np.pi
         if th < -np.pi:
@@ -151,16 +111,18 @@ class RightHandRuleController:
         self.x = x
         self.y = y
         self.th = th
+        #Obtenemos el giro deseado para alinearnos
         thi = np.arctan2(self.yt-yin,self.xt-xin)
         if thi > np.pi:
             thi = th - 2*np.pi
         if thi < -np.pi:
             thi = thi + 2*np.pi
-        #thr = np.arctan2(self.x,self.y)    
+        #Obtenemos el error de giro
         ther = thi - self.th
         self.eth = ther
+        #Obtenemos la distancia euclidiana al punto final
         edis = np.sqrt((self.xt - self.x)**2 + (self.yt - self.y)**2)
-        #print(edis)
+        #Constantes de control para el giro y avanzar hacia el punto
         kd,kth = 1,1
         if ther > np.pi:
             ther = th - 2*np.pi
@@ -168,17 +130,18 @@ class RightHandRuleController:
             ther = thi + 2*np.pi
         w = (ther*kth)
         v = kd * edis
+        #Filtro de saturacion
         if v > self.v_max:
                 v = self.v_max
         elif v < -1*self.v_max:
             v = -1*self.v_max
-        #print(v,w)
+        #Si estamos cerca del punto paramos
         if edis < 0.4:
             v,w = 0,0
-        print(edis)
         return (v,w)
 
     def cal_linea(self,x0,y0,xf,yf):
+        #Funcion que obtiene las constantes a,b,c para oobtener la desitancia con la linea original
         x0_inv = -xf
         y0_inv = -yf
         a,b,c = 0,0,0
@@ -190,13 +153,18 @@ class RightHandRuleController:
 
         
     def main(self):
+        #Obtenemos el tiempo inicial
         t0 = rospy.get_rostime().to_sec()
+        #Estados que controlan si seguimos pared o seguimos odometria
         estado_odom = True
         estado_esquina = False
+        #Obtenemos las constantes del la linea recta deseada
         a,b,c = self.cal_linea(self.x,self.y,self.xt,self.yt)
         while not rospy.is_shutdown():
+            #Si el scan no esta vacio
             if self.scan is None:
                 continue
+            """Obtenemos la distancia hacia enfrente a la izquierda, derecha y el rayo de 45 grados de la izquierda y derecha"""
             self.distance_ahead = (get_distance_in_sector(self.scan,np.pi,np.pi - 2*np.pi/180)+get_distance_in_sector(self.scan,-np.pi + 2*np.pi/180,-np.pi))/2
             
             self.distance_to_left = get_distance_in_sector(self.scan,
@@ -212,33 +180,36 @@ class RightHandRuleController:
                                                     np.radians(137),
                                                     np.radians(133))
             tf = rospy.get_rostime().to_sec()
+            #Obtenemos la diferencial de tiempos
             dt = tf- t0
             if dt > 0.1:
                 dt = 0.0
+            #Hacmos la odometria todo el tiempo para saber donde estamos
             v,w = self.odometry(dt,self.xin,self.yin)
+            #Obtenemos la distancia con la liea original
             dist = (np.abs(a*self.x + b*self.y + c))/(np.sqrt(a**2 + b**2))
-            print(dist)
-            if (self.distance_ahead < 0.5) or (self.rayo_izq < 0.3) or (self.rayo_der< 0.05) :
+            #Si detecatmos alfrente o a los damos mas cerca que un umbral pasamos a modo wall follower
+            if (self.distance_ahead < 0.5) or (self.rayo_izq < 0.2) or (self.rayo_der< 0.05) :
                 self.thin = self.th
                 estado_odom = False
-
+            #Si estamos en modo wall follower y estamos cerca de la linea original y pero hay diferencia entre tu angulo inciail y final retomamos la linea original
             if (estado_odom == False) and (dist < 0.05) and (np.abs(self.thin - self.th) > 0.1):
                 estado_odom = True
+                #Obtenemos los nuevos puntos iniciales para alinearnos
                 self.xin = self.x
                 self.yin = self.y
-            
+            #Controlamos si seguimos la pared o no
             if estado_odom == False:
                 print("Wall follow")
                 v,w = self.follow_left_hand_wall()
             else:
                 print("Odom follow")
+            #Publicamos la velocidad
             msg = Twist()
             msg.angular.z = w
             msg.linear.x = v
             self.vel_pub.publish(msg)
-            #print("estado odom",self.xin,self.yin,self.thin)
             t0 = tf
-            #print(perpendicular_wall_dis)
             self.rate.sleep()       
 
 def range_index(scan, angle):
@@ -271,33 +242,12 @@ def find_wall_direction(scan):
     a = get_distance_in_sector(scan, np.radians(theta+2), np.radians(theta-2))
     #Obtenemos la idstancia perpendicular del robot con el muro
     b = get_distance_in_sector(scan, np.radians(-88), np.radians(-92))
-    #print(a,b)
     #Obtenemos el angulo de inclinacion del robot conforme al muro
     alpha = np.arctan2((-a*np.cos(np.radians(theta))-b),(-a*np.sin(np.radians(theta))))
-    #print(a,b)
-    #print(alpha)
-    #print((-a*np.sin(np.radians(theta))))
     return alpha
     #--------------------------------------------------------------
     #--------------------------------------------------------------
 
-
-def find_wall_direction_right(scan):
-    #--------------------------------------------------------------
-    # Your code here
-    #Declaramos el angulo de inclinacion del rayo que va a ser la hipotenusa de nuestro triangulo
-    theta = 135
-    #Obtenemos la distancia de la hipotenusa de nuestro triangulo
-    a = get_distance_in_sector(scan, np.radians(theta+2), np.radians(theta-2))
-    #Obtenemos la idstancia perpendicular del robot con el muro
-    b = get_distance_in_sector(scan, np.radians(92), np.radians(88))
-    print(a,b)
-    #Obtenemos el angulo de inclinacion del robot conforme al muro
-    alpha = np.arctan2((-a*np.cos(np.radians(theta))-b),(a*np.sin(np.radians(theta))))
-    #print(-a*np.cos(np.radians(theta))-b)
-    print(np.degrees(alpha))
-    #print((-a*np.sin(np.radians(theta))))
-    return alpha
     
 def get_distance_in_sector(scan, start_angle, end_angle) :
     num_scans = len(scan.ranges)

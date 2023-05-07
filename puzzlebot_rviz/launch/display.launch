@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="model" default="$(find puzzlebot_rviz)/urdf/puzzlebot.urdf"/>
+  <arg name="gui" default="false" />
+  <arg name="rvizconfig" default="$(find puzzlebot_rviz)/rviz/config.rviz" />
+  <param name="robot_description" command="$(find xacro)/xacro $(arg model)" />
+  <node if="$(arg gui)" name="joint_state_publisher" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" />
+  <node unless="$(arg gui)" name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+ 
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+ 
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)" required="true" />
+  <!--node pkg="tf" type="static_transform_publisher" name="robot_on_the_map" args="0 0 0 0 0 0 /map /base_link 10"/-->
+  <node pkg="puzzlebot_rviz" type="dead_reckoning.py" name="puzzlebot_kinematic_model"/>
+</launch>
